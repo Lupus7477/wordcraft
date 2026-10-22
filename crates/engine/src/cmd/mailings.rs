@@ -998,7 +998,9 @@ fn finish(s: &mut Session, v: &Value) -> CmdResult {
             let mut last = s.doc.last_section.clone();
             remap_headers(&mut last, &map, first);
             if let Some(prev) = prev_section.replace(last) {
-                if !matches!(out.body.last().map(|b| &**b), Some(Block::Para(_))) {
+                // A letter ending in a table or in a section break of its own gets a paragraph to
+                // end it, so that section keeps its properties.
+                if !matches!(out.body.last().map(|b| &**b), Some(Block::Para(p)) if p.section.is_none()) {
                     out.body.push(para_block(Paragraph::new()));
                 }
                 if let Some(Block::Para(p)) = out.body.last_mut().map(std::sync::Arc::make_mut) {
@@ -1476,6 +1478,22 @@ mod tests {
         let starts: Vec<(usize, f32)> = (0..3).filter_map(|i| layout.caret(&Pos::body(2 * i, 0))).map(|c| (c.page, c.top)).collect();
         assert_eq!(starts.iter().map(|(page, _)| *page).collect::<Vec<_>>(), [0, 1, 2], "one letter per page");
         assert!(starts.iter().all(|(_, top)| (top - starts[0].1).abs() < 0.01), "{starts:?}");
+    }
+
+    /// A template whose last paragraph ends a section of its own: every letter keeps that
+    /// section's properties (#3777 review).
+    #[test]
+    fn merged_letters_keep_a_section_the_template_ends_with() {
+        let mut s = Session::new(Document::new());
+        s.run("mailings.recipients", &json!({"csv": "Name\nAda\nBo"})).unwrap();
+        s.run("mailings.insertField", &json!({"field": "Name"})).unwrap();
+        let landscape = SectionProps { page_w: 842.0, page_h: 595.0, ..s.doc.last_section.clone() };
+        if let Some(Block::Para(p)) = s.doc.body.last_mut().map(std::sync::Arc::make_mut) {
+            p.section = Some(Box::new(landscape));
+        }
+        s.run("mailings.finish", &json!({})).unwrap();
+        let ends: Vec<f32> = s.doc.body.iter().filter_map(|b| b.as_para()?.section.as_ref().map(|sp| sp.page_w)).collect();
+        assert_eq!(ends.iter().filter(|w| **w == 842.0).count(), 2, "each letter's own section: {ends:?}");
     }
 
     /// A typed list (#240) keeps its column order, and rows may be arrays in that order.
