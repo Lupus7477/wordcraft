@@ -1510,6 +1510,11 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         close |= crate::window_close::show(ctx, &shown.response, &Tokens::get(ctx));
     }
     if close {
+        // Format › Font… / Paragraph… closed by its close box: Modify Style comes back, as on
+        // Cancel (a no-op when OK or Cancel already brought it back).
+        if app.dialog.is_none() {
+            back_to_style(app, &mut d);
+        }
         app.canvas.want_focus = true;
     } else {
         app.dialog = Some(d);
@@ -4890,7 +4895,12 @@ mod tests {
             app,
         );
         h.run_steps(3);
-        for button in ["OK", "Cancel"] {
+        // A change made in Modify Style before Format › Paragraph… survives each way back.
+        if let Some(Dialog::ModifyStyle(f)) = &mut h.state_mut().dialog {
+            f.chr.bold = Some(false);
+        }
+        // "Close" is the title bar's close box, which acts as Cancel (#3777 review).
+        for button in ["OK", "Cancel", "Close"] {
             h.get_by_label("Format").click();
             h.run_steps(2);
             h.get_by_label("Paragraph…").click();
@@ -4899,7 +4909,8 @@ mod tests {
             assert!(h.query_by_label("Tabs…").is_none(), "no Tabs… for a style");
             h.get_by_role_and_label(egui::accesskit::Role::Button, button).click();
             h.run_steps(3);
-            assert!(matches!(&h.state().dialog, Some(Dialog::ModifyStyle(f)) if f.id == "Heading1"), "{button} brings Modify Style back");
+            let back = matches!(&h.state().dialog, Some(Dialog::ModifyStyle(f)) if f.id == "Heading1" && f.chr.bold == Some(false));
+            assert!(back, "{button} brings Modify Style back with its changes");
         }
     }
 
