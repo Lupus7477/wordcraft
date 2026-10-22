@@ -79,6 +79,10 @@ pub fn specs() -> Vec<CommandSpec> {
             r#"{"kind"?: "box|none", "width"?: pt, "color"?: "RRGGBB", "style"?: "single|double|dotted|dashed|thick|triple|dotDash|wave", "sides"?: {"top"|"left"|"bottom"|"right": {"style"?, "width"?: pt, "color"?: "RRGGBB"} | null} (exactly these sides, instead of `kind`), "applyTo"?: "section|document"}"#,
         ),
         CommandSpec::new("design.setDefault", "Set as Default", "Design › Document Formatting", |s, _| {
+            // New documents' Normal style looks like this document's Normal paragraphs: its Normal
+            // style over its defaults, a Paragraph Spacing preset included (#1264, #1913).
+            let (para, chr) = s.doc.styles.para_style_props("Normal");
+            (s.prefs.normal_para, s.prefs.normal_chr) = (para, chr);
             s.status = "These settings will be used for new documents.".into();
             sel_result(s)
         })
