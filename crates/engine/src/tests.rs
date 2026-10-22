@@ -3968,6 +3968,7 @@ fn set_default_persists_normal_for_new_documents() {
     let n = d.styles.get("Normal").unwrap();
     assert_eq!(n.chr.font.as_deref(), Some("Courier New"));
     assert_eq!(n.para.space_after, Some(0.0));
+    assert_eq!(n.chr.lang, None, "the inherited language stays the editing language's");
     // The prefs survive a ui.json round trip.
     let v = serde_json::to_value(&s.prefs).unwrap();
     let back: crate::Prefs = serde_json::from_value(v).unwrap();

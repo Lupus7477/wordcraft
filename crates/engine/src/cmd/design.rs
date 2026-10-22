@@ -81,7 +81,11 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("design.setDefault", "Set as Default", "Design › Document Formatting", |s, _| {
             // New documents' Normal style looks like this document's Normal paragraphs: its Normal
             // style over its defaults, a Paragraph Spacing preset included (#1264, #1913).
-            let (para, chr) = s.doc.styles.para_style_props("Normal");
+            let (para, mut chr) = s.doc.styles.para_style_props("Normal");
+            // Only a language Normal sets itself: an inherited one is the editing language's, which
+            // a new document gets from File › Options (#3777 review).
+            let own = s.doc.styles.get("Normal").map(|n| n.chr.clone()).unwrap_or_default();
+            (chr.lang, chr.lang_ea, chr.lang_bidi) = (own.lang, own.lang_ea, own.lang_bidi);
             (s.prefs.normal_para, s.prefs.normal_chr) = (para, chr);
             s.status = "These settings will be used for new documents.".into();
             sel_result(s)
