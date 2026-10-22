@@ -948,7 +948,11 @@ fn finish(s: &mut Session, v: &Value) -> CmdResult {
     let directory = s.merge.kind == "directory";
     let hf: Vec<u32> =
         header_footer_ids(&s.doc).into_iter().filter(|id| s.doc.story(StoryRef::Part(*id)).is_some_and(|b| has_merge_fields(b, 0))).collect();
-    let per_record = !directory && !hf.is_empty();
+    // Each letter is its own section starting on a new page, as Word's Edit Individual Documents
+    // makes them: a page break in the previous letter's last paragraph carried that paragraph's
+    // space after onto the next page (#2564). Headers and footers with merge fields get a copy
+    // per letter.
+    let per_record = !directory;
     let mut out = s.doc.clone();
     out.body.clear();
     let mut next_id = s.doc.parts.keys().next_back().map_or(1, |k| k.saturating_add(1));
@@ -1001,13 +1005,6 @@ fn finish(s: &mut Session, v: &Value) -> CmdResult {
                     p.section = Some(Box::new(prev));
                 }
             }
-        } else if count > 0
-            && !directory
-            && let Some(Block::Para(p)) = out.body.last_mut().map(std::sync::Arc::make_mut)
-        {
-            let end = p.len();
-            let props = p.props_at(end).clone();
-            let _ = p.insert_text(end, "\u{000C}", &props);
         }
         out.body.extend(body);
         count += 1;
@@ -1460,6 +1457,25 @@ mod tests {
         let t = s.doc.plain_text(StoryRef::Body);
         assert!(t.contains("See you in London") && t.contains("Dear Alan Turing,"), "{t}");
         assert_eq!(s.layout().pages.len(), 2);
+    }
+
+    /// #2564: every merged letter starts where the first does, on its own page: the letter's last
+    /// paragraph's space after isn't carried onto the next page.
+    #[test]
+    fn merged_letters_start_at_the_same_height() {
+        let mut s = Session::new(Document::new());
+        s.run("mailings.recipients", &json!({"csv": "Name\nAda\nBo\nCy"})).unwrap();
+        s.run("text.insert", &json!({"text": "Hello "})).unwrap();
+        s.run("mailings.insertField", &json!({"field": "Name"})).unwrap();
+        s.run("text.newParagraph", &json!({})).unwrap();
+        s.run("text.insert", &json!({"text": "Regards"})).unwrap();
+        s.run("para.set", &json!({"props": {"spaceAfter": 24}})).unwrap();
+        assert_eq!(s.run("mailings.finish", &json!({})).unwrap()["records"], 3);
+        assert!(!s.doc.plain_text(StoryRef::Body).contains('\u{000C}'), "no page break characters");
+        let layout = s.layout();
+        let starts: Vec<(usize, f32)> = (0..3).filter_map(|i| layout.caret(&Pos::body(2 * i, 0))).map(|c| (c.page, c.top)).collect();
+        assert_eq!(starts.iter().map(|(page, _)| *page).collect::<Vec<_>>(), [0, 1, 2], "one letter per page");
+        assert!(starts.iter().all(|(_, top)| (top - starts[0].1).abs() < 0.01), "{starts:?}");
     }
 
     /// A typed list (#240) keeps its column order, and rows may be arrays in that order.
