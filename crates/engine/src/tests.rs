@@ -3975,6 +3975,28 @@ fn set_default_persists_normal_for_new_documents() {
     assert!(back.shape_new_documents() && !crate::Prefs::default().shape_new_documents(), "the first blank document is made again");
 }
 
+/// #1913: Design › Paragraph Spacing changed nothing when the Normal style sets its own spacing
+/// (as documents from other programs do); now Normal paragraphs get the preset, headings keep
+/// their own space before and after, and Set as Default keeps it for new documents.
+#[test]
+fn paragraph_spacing_preset_reaches_normal_paragraphs_and_new_documents() {
+    use wordcraft_doc::props::LineSpacing;
+    let mut s = s();
+    run(&mut s, "styles.modify", json!({"style": "Normal", "para": {"spaceAfter": 6, "lineSpacing": {"rule": "multiple", "value": 1.0}}}));
+    let heading = s.doc.styles.resolve_para(&wordcraft_doc::ParaProps { style: Some("Heading1".into()), ..Default::default() });
+    run(&mut s, "design.paragraphSpacing", json!({"value": "double"}));
+    let para = |s: &Session, style: &str| s.doc.styles.resolve_para(&wordcraft_doc::ParaProps { style: Some(style.into()), ..Default::default() });
+    let normal = para(&s, "Normal");
+    assert_eq!((normal.line_spacing, normal.space_after), (LineSpacing::Multiple(2.0), 8.0));
+    let h = para(&s, "Heading1");
+    assert_eq!((h.space_before, h.space_after), (heading.space_before, heading.space_after), "a heading keeps its own spacing");
+    assert_eq!(h.line_spacing, LineSpacing::Multiple(2.0), "and gets the preset's line spacing");
+    run(&mut s, "design.setDefault", json!({}));
+    let d = s.blank_document();
+    let fresh = d.styles.resolve_para(&wordcraft_doc::ParaProps { style: Some("Normal".into()), ..Default::default() });
+    assert_eq!((fresh.line_spacing, fresh.space_after), (LineSpacing::Multiple(2.0), 8.0), "a new document");
+}
+
 /// A fresh, empty scratch folder for one test.
 #[cfg(not(target_arch = "wasm32"))]
 fn scratch_dir(name: &str) -> std::path::PathBuf {

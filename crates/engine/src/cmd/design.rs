@@ -194,9 +194,16 @@ fn para_spacing(s: &mut Session, v: &Value) -> CmdResult {
         "double" => (0.0, 8.0, 2.0),
         _ => (0.0, 8.0, 1.15),
     };
-    s.doc.styles.default_para.space_before = Some(before);
-    s.doc.styles.default_para.space_after = Some(after);
-    s.doc.styles.default_para.line_spacing = Some(LineSpacing::Multiple(line));
+    let styles = &mut s.doc.styles;
+    styles.default_para.space_before = Some(before);
+    styles.default_para.space_after = Some(after);
+    styles.default_para.line_spacing = Some(LineSpacing::Multiple(line));
+    // Normal paragraphs get the preset: spacing of the Normal style's own (common in documents
+    // from other programs) would hide it (#1913). Other styles keep theirs, a heading's space
+    // before say.
+    if let Some(normal) = styles.get_mut("Normal") {
+        (normal.para.space_before, normal.para.space_after, normal.para.line_spacing) = (None, None, None);
+    }
     sel_result(s)
 }
 
